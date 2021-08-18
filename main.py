@@ -1,6 +1,6 @@
 import aiohttp
 import asyncio
-from db import DBWorker
+from db import DBWorker, dispose_engine
 
 
 API_URL = 'https://swapi.dev/api/people/'
@@ -42,11 +42,12 @@ async def store_character(character):
     character['species'] = ','.join(character['species'])
     character['starships'] = ','.join(character['starships'])
     character['vehicles'] = ','.join(character['vehicles'])
-    db_worker.save_character(character)
+    await db_worker.save_character(character)
     print(character)
 
 
 async def main():
+    await db_worker.begin()
     page = 1
     while True:
         page_data = await get_page_data(API_URL, page)
@@ -56,7 +57,7 @@ async def main():
         tasks = [asyncio.create_task(store_character(character)) for character in page_data['results']]
         await asyncio.gather(*tasks)
         page += 1
-
+    await dispose_engine()
 
 # нужно на винде
 asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())

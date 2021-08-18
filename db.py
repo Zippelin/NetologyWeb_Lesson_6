@@ -1,9 +1,10 @@
 import sqlalchemy as sq
 from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 
-engine = create_engine('sqlite:///db.db')
+engine = create_async_engine('sqlite+aiosqlite:///db.db', echo=True)
 Base = declarative_base()
 
 
@@ -31,19 +32,28 @@ class CharacterModel(Base):
 
 
 class DBWorker:
-    def __init__(self):
+
+    async def begin(self):
         try:
-            Base.metadata.create_all(bind=engine)
-            self.session = sessionmaker(bind=engine)()
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.drop_all)
+                await conn.run_sync(Base.metadata.create_all)
+            self.async_session = sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
         except:
             raise Exception('DB not ready')
 
-    def save_character(self, character):
+    async def save_character(self, character):
         character_data = {
             key: value
             for key, value in character.items()
             if key in CharacterModel().get_fields()
         }
-        new_character = CharacterModel(**character_data)
-        self.session.add(new_character)
-        self.session.commit()
+        async with self.async_session() as session:
+            async with session.begin():
+                session.add(CharacterModel(**character_data))
+
+            await session.commit()
+
+
+async def dispose_engine():
+    await engine.dispose()
